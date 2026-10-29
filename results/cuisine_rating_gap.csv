@@ -1,0 +1,25 @@
+cuisine,rated_restaurants,avg_rating,rating_gap
+European,117,3.91,0.56
+Asian,181,3.85,0.5
+Mexican,124,3.83,0.47
+Italian,644,3.71,0.36
+Thai,200,3.69,0.34
+Continental,687,3.7,0.34
+Cafe,559,3.63,0.27
+American,216,3.55,0.2
+Burger,153,3.52,0.17
+Desserts,487,3.5,0.15
+Finger Food,101,3.5,0.14
+Beverages,163,3.48,0.13
+Ice Cream,159,3.41,0.06
+Biryani,124,3.39,0.04
+Bakery,516,3.37,0.01
+Healthy Food,133,3.34,-0.01
+North Indian,3003,3.29,-0.06
+Mughlai,791,3.27,-0.08
+Chinese,2137,3.27,-0.08
+Street Food,395,3.27,-0.09
+Fast Food,1540,3.25,-0.1
+Pizza,260,3.24,-0.11
+South Indian,480,3.23,-0.12
+Mithai,251,3.14,-0.21

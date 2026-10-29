@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zomato Restaurant Deep Dive</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: analyst's workbook. Header, KPI strip, then two-column panels; each panel flips between chart, table and the SQL that produced it. */
+:root {
+  --page: #f4f5f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #7d7b75;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --line: rgba(11,11,11,0.10);
+  --accent: #2a78d6;
+  --code-bg: #eef1f5;
+  --code-kw: #1c5cab;
+  --code-str: #8a4b12;
+  --code-cm: #6f7a6a;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0f0f0e; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #95938c;
+    --grid: #2c2c2a; --axis: #383835; --line: rgba(255,255,255,0.10); --accent: #3987e5;
+    --code-bg: #141a22; --code-kw: #86b6ef; --code-str: #e8a86b; --code-cm: #8c9688;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0f0f0e; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #95938c;
+  --grid: #2c2c2a; --axis: #383835; --line: rgba(255,255,255,0.10); --accent: #3987e5;
+  --code-bg: #141a22; --code-kw: #86b6ef; --code-str: #e8a86b; --code-cm: #8c9688;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.5 var(--font-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 28px; }
+header { display: grid; gap: 10px; }
+.eyebrow { font: 500 12px/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
+.sub { margin: 0; max-width: 68ch; color: var(--ink-2); font-size: 16px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--ink-2); }
+.meta a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.meta a:hover { border-bottom-color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 12px/1 var(--font-mono); padding: 6px 8px; border-radius: 4px; background: var(--code-bg); color: var(--ink-2); }
+section { display: grid; gap: 14px; }
+h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); padding-bottom: 8px; border-bottom: 1px solid var(--grid); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; }
+.kpi .label { font-size: 13px; color: var(--ink-2); }
+.kpi .value { font-size: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 14px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 10px; min-width: 0; align-content: start; }
+.panel.full { grid-column: 1 / -1; }
+.panel-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-wrap: wrap; }
+.panel h3 { margin: 0; font-size: 16px; font-weight: 600; text-wrap: balance; }
+.insight { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 70ch; }
+.tabs { display: inline-flex; gap: 2px; background: var(--code-bg); padding: 2px; border-radius: 6px; }
+.tabs button { font: 500 12px/1 var(--font-ui); border: 0; background: transparent; color: var(--ink-2); padding: 6px 10px; border-radius: 4px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.view { min-width: 0; }
+.chart-box { position: relative; width: 100%; }
+.table-box, .sql-box { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { font-weight: 600; color: var(--ink-2); position: sticky; top: 0; background: var(--surface); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+pre { margin: 0; background: var(--code-bg); border-radius: 6px; padding: 12px 14px; font: 12.5px/1.55 var(--font-mono); color: var(--ink); white-space: pre; }
+.kw { color: var(--code-kw); font-weight: 500; } .str { color: var(--code-str); } .cm { color: var(--code-cm); font-style: italic; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--grid); padding-top: 14px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const DATA = {"title": "Zomato Restaurant Deep Dive", "subtitle": "Price, quality and online delivery across 8,652 Indian restaurants on Zomato, most of them in Delhi NCR: which neighbourhoods, cuisines and price points earn the best ratings, and where value for money sits.", "dataset": {"name": "Zomato Restaurants Data (Kaggle, Shruti Mehta)", "url": "https://www.kaggle.com/datasets/shrutimehta/zomato-restaurants-data", "rows": "9,551 restaurants, 8,652 in India"}, "author": "Malhar Patel", "repo": "https://github.com/malharpatel78/zomato-restaurant-sql-analysis", "currency": "₹", "stack": ["SQLite", "Recursive CTE", "Window functions", "Weighted rating", "CASE bucketing", "Chart.js"], "panels": [{"name": "overview", "section": "At a glance", "title": "Headline numbers (India)", "insight": "8,652 Indian restaurants, 92% of them in Delhi NCR. A quarter have no rating yet, and the rated ones average 3.35 out of 5.", "chart": {"type": "kpi", "money": ["median_cost_for_two"]}, "sql": "WITH ordered AS (\n    SELECT cost_for_two,\n           ROW_NUMBER() OVER (ORDER BY cost_for_two) AS rn,\n           COUNT(*) OVER ()                          AS n\n    FROM restaurants WHERE cost_for_two IS NOT NULL\n)\nSELECT COUNT(*)                                                             AS restaurants,\n       ROUND(100.0 * SUM(region = 'Delhi NCR') / COUNT(*), 1)               AS delhi_ncr_pct,\n       ROUND(100.0 * COUNT(rating) / COUNT(*), 1)                           AS rated_pct,\n       ROUND(AVG(rating), 2)                                                AS avg_rating,\n       (SELECT cost_for_two FROM ordered WHERE rn = (n + 1) / 2)            AS median_cost_for_two,\n       ROUND(100.0 * SUM(has_online_delivery = 'Yes') / COUNT(*), 1)        AS online_delivery_pct\nFROM restaurants;", "columns": ["restaurants", "delhi_ncr_pct", "rated_pct", "avg_rating", "median_cost_for_two", "online_delivery_pct"], "rows": [[8652, 91.9, 75.3, 3.35, 450, 28.0]]}, {"name": "city_coverage", "section": "Coverage", "title": "Restaurants by city (top 10)", "insight": "This is a Delhi NCR dataset: New Delhi alone has 5,473 restaurants. Every other city has 20 to 21, so city-level comparisons outside NCR are not meaningful.", "chart": {"type": "hbar", "x": "city", "y": ["restaurants"]}, "sql": "SELECT city, region, COUNT(*) AS restaurants\nFROM restaurants\nGROUP BY city\nORDER BY restaurants DESC\nLIMIT 10;", "columns": ["city", "region", "restaurants"], "rows": [["New Delhi", "Delhi NCR", 5473], ["Gurgaon", "Delhi NCR", 1118], ["Noida", "Delhi NCR", 1080], ["Faridabad", "Delhi NCR", 251], ["Ghaziabad", "Delhi NCR", 25], ["Lucknow", "Other cities", 21], ["Guwahati", "Other cities", 21], ["Bhubaneshwar", "Other cities", 21], ["Amritsar", "Other cities", 21], ["Ahmedabad", "Other cities", 21]]}, {"name": "region_bias", "section": "Coverage", "title": "Delhi NCR vs the other 38 cities", "insight": "The 705 restaurants outside NCR are all rated, average 488 votes and score 3.94, against 3.28 in NCR. They look like a sample of each city's best-known places, which is why NCR-only analysis follows.", "chart": {"type": "table", "money": ["avg_cost_for_two"]}, "sql": "SELECT region,\n       COUNT(DISTINCT city)                        AS cities,\n       COUNT(*)                                    AS restaurants,\n       ROUND(100.0 * COUNT(rating) / COUNT(*), 1)  AS rated_pct,\n       ROUND(AVG(rating), 2)                       AS avg_rating,\n       ROUND(AVG(votes), 0)                        AS avg_votes,\n       ROUND(AVG(cost_for_two), 0)                 AS avg_cost_for_two\nFROM restaurants\nGROUP BY region;", "columns": ["region", "cities", "restaurants", "rated_pct", "avg_rating", "avg_votes", "avg_cost_for_two"], "rows": [["Delhi NCR", 5, 7947, 73.1, 3.28, 106.0, 600.0], ["Other cities", 38, 705, 100.0, 3.94, 488.0, 895.0]]}, {"name": "rating_labels", "section": "Coverage", "title": "Restaurants by Zomato rating label", "insight": "More than half of rated restaurants (56%) score 'Average' (2.5 to 3.4). Only 1.3% of all restaurants reach 'Excellent' (4.5+).", "chart": {"type": "bar", "x": "rating_label", "y": ["restaurants"]}, "sql": "SELECT rating_label,\n       COUNT(*)                                            AS restaurants,\n       ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1)  AS share_pct\nFROM restaurants\nGROUP BY rating_label\nORDER BY CASE rating_label WHEN 'Not rated' THEN 0 WHEN 'Poor' THEN 1 WHEN 'Average' THEN 2\n                           WHEN 'Good' THEN 3 WHEN 'Very good' THEN 4 ELSE 5 END;", "columns": ["rating_label", "restaurants", "share_pct"], "rows": [["Not rated", 2139, 24.7], ["Poor", 180, 2.1], ["Average", 3678, 42.5], ["Good", 1847, 21.3], ["Very good", 692, 8.0], ["Excellent", 116, 1.3]]}, {"name": "top_localities", "section": "Delhi NCR neighbourhoods", "title": "Most restaurant-dense localities in Delhi NCR", "insight": "Connaught Place is the densest locality (122 restaurants) and also rates well (3.78). Dense residential areas such as Shahdara and Mayur Vihar Phase 1 rate about 3.0.", "chart": {"type": "hbar", "x": "locality", "y": ["restaurants"]}, "sql": "SELECT locality || ', ' || city   AS locality,\n       COUNT(*)                   AS restaurants,\n       ROUND(AVG(rating), 2)      AS avg_rating\nFROM restaurants\nWHERE region = 'Delhi NCR'\nGROUP BY locality, city\nORDER BY restaurants DESC\nLIMIT 12;", "columns": ["locality", "restaurants", "avg_rating"], "rows": [["Connaught Place, New Delhi", 122, 3.78], ["Rajouri Garden, New Delhi", 99, 3.63], ["Shahdara, New Delhi", 87, 3.0], ["Defence Colony, New Delhi", 86, 3.49], ["Pitampura, New Delhi", 85, 3.17], ["Malviya Nagar, New Delhi", 84, 3.42], ["Mayur Vihar Phase 1, New Delhi", 84, 2.99], ["Rajinder Nagar, New Delhi", 81, 3.06], ["Safdarjung, New Delhi", 80, 3.25], ["Satyaniketan, New Delhi", 79, 3.53], ["Karol Bagh, New Delhi", 76, 3.24], ["Krishna Nagar, New Delhi", 76, 3.09]]}, {"name": "best_localities", "section": "Delhi NCR neighbourhoods", "title": "Best-rated NCR localities vs the NCR average (20+ rated restaurants)", "insight": "The best-rated localities are destination districts: Gurgaon's Sector 29 and Cyber Hub, Hauz Khas Village and Khan Market. These four average ₹1,250 or more for two.", "chart": {"type": "hbar", "x": "locality", "y": ["rating_vs_ncr_avg"]}, "sql": "SELECT locality || ', ' || city   AS locality,\n       COUNT(rating)              AS rated_restaurants,\n       ROUND(AVG(rating), 2)      AS avg_rating,\n       ROUND(AVG(rating) - (SELECT AVG(rating) FROM restaurants WHERE region = 'Delhi NCR'), 2) AS rating_vs_ncr_avg,\n       ROUND(AVG(cost_for_two), 0) AS avg_cost_for_two\nFROM restaurants\nWHERE region = 'Delhi NCR'\nGROUP BY locality, city\nHAVING COUNT(rating) >= 20\nORDER BY avg_rating DESC\nLIMIT 12;", "columns": ["locality", "rated_restaurants", "avg_rating", "rating_vs_ncr_avg", "avg_cost_for_two"], "rows": [["Sector 29, Gurgaon", 38, 3.89, 0.61, 1395.0], ["Cyber Hub, DLF Cyber City, Gurgaon", 41, 3.86, 0.58, 1322.0], ["Hauz Khas Village, New Delhi", 24, 3.85, 0.57, 1402.0], ["DLF Mall of India, Sector 18, Noida, Noida", 31, 3.84, 0.56, 947.0], ["DLF Phase 4, Gurgaon", 21, 3.8, 0.52, 750.0], ["Khan Market, New Delhi", 43, 3.8, 0.52, 1258.0], ["Connaught Place, New Delhi", 119, 3.78, 0.5, 1175.0], ["Select Citywalk Mall, Saket, New Delhi", 25, 3.76, 0.48, 904.0], ["Shahpur Jat, New Delhi", 26, 3.72, 0.44, 777.0], ["Greater Kailash (GK) 1, New Delhi", 66, 3.7, 0.42, 900.0], ["Vasant Kunj, New Delhi", 22, 3.69, 0.41, 891.0], ["Rajouri Garden, New Delhi", 98, 3.63, 0.35, 855.0]]}, {"name": "top_cuisines", "section": "Cuisines", "title": "Most common cuisines (a restaurant counts once per cuisine)", "insight": "North Indian is on 46% of menus and Chinese on 31%. Fast food comes third at 23%.", "chart": {"type": "hbar", "x": "cuisine", "y": ["restaurants"]}, "sql": "SELECT cuisine,\n       COUNT(*)                                                         AS restaurants,\n       ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM restaurants), 1)  AS share_of_restaurants_pct\nFROM restaurant_cuisines\nGROUP BY cuisine\nORDER BY restaurants DESC\nLIMIT 12;", "columns": ["cuisine", "restaurants", "share_of_restaurants_pct"], "rows": [["North Indian", 3946, 45.6], ["Chinese", 2688, 31.1], ["Fast Food", 1963, 22.7], ["Mughlai", 991, 11.5], ["Bakery", 725, 8.4], ["Continental", 724, 8.4], ["Italian", 682, 7.9], ["South Indian", 631, 7.3], ["Cafe", 627, 7.2], ["Desserts", 597, 6.9], ["Street Food", 554, 6.4], ["Mithai", 380, 4.4]]}, {"name": "cuisine_rating_gap", "section": "Cuisines", "title": "Rating above or below the India average, by cuisine (100+ rated restaurants)", "insight": "European, Asian and Mexican restaurants rate about half a point above average. The most common cuisines, North Indian, Chinese and Mughlai, sit just below it, and mithai shops rate lowest.", "chart": {"type": "hbar", "x": "cuisine", "y": ["rating_gap"]}, "sql": "WITH national AS (SELECT AVG(rating) AS avg_rating FROM restaurants)\nSELECT rc.cuisine,\n       COUNT(r.rating)                                AS rated_restaurants,\n       ROUND(AVG(r.rating), 2)                        AS avg_rating,\n       ROUND(AVG(r.rating) - national.avg_rating, 2)  AS rating_gap\nFROM restaurant_cuisines rc\nJOIN restaurants r ON r.restaurant_id = rc.restaurant_id\nCROSS JOIN national\nGROUP BY rc.cuisine\nHAVING COUNT(r.rating) >= 100\nORDER BY rating_gap DESC;", "columns": ["cuisine", "rated_restaurants", "avg_rating", "rating_gap"], "rows": [["European", 117, 3.91, 0.56], ["Asian", 181, 3.85, 0.5], ["Mexican", 124, 3.83, 0.47], ["Italian", 644, 3.71, 0.36], ["Thai", 200, 3.69, 0.34], ["Continental", 687, 3.7, 0.34], ["Cafe", 559, 3.63, 0.27], ["American", 216, 3.55, 0.2], ["Burger", 153, 3.52, 0.17], ["Desserts", 487, 3.5, 0.15], ["Finger Food", 101, 3.5, 0.14], ["Beverages", 163, 3.48, 0.13], ["Ice Cream", 159, 3.41, 0.06], ["Biryani", 124, 3.39, 0.04], ["Bakery", 516, 3.37, 0.01], ["Healthy Food", 133, 3.34, -0.01], ["North Indian", 3003, 3.29, -0.06], ["Mughlai", 791, 3.27, -0.08], ["Chinese", 2137, 3.27, -0.08], ["Street Food", 395, 3.27, -0.09], ["Fast Food", 1540, 3.25, -0.1], ["Pizza", 260, 3.24, -0.11], ["South Indian", 480, 3.23, -0.12], ["Mithai", 251, 3.14, -0.21]]}, {"name": "price_tiers", "section": "Price and quality", "title": "Price tiers: size, cost and rating", "insight": "Half of all restaurants are in the cheapest tier (₹285 for two on average). The top tier costs nine times as much and draws over ten times the votes per restaurant.", "chart": {"type": "table", "money": ["avg_cost_for_two"]}, "sql": "SELECT price_range                                   AS price_tier,\n       COUNT(*)                                      AS restaurants,\n       ROUND(AVG(cost_for_two), 0)                   AS avg_cost_for_two,\n       ROUND(AVG(rating), 2)                         AS avg_rating,\n       ROUND(AVG(votes), 0)                          AS avg_votes,\n       ROUND(100.0 * SUM(has_online_delivery = 'Yes') / COUNT(*), 1) AS online_delivery_pct,\n       ROUND(100.0 * SUM(has_table_booking = 'Yes') / COUNT(*), 1)   AS table_booking_pct\nFROM restaurants\nGROUP BY price_range\nORDER BY price_range;", "columns": ["price_tier", "restaurants", "avg_cost_for_two", "avg_rating", "avg_votes", "online_delivery_pct", "table_booking_pct"], "rows": [[1, 4295, 285.0, 3.2, 36.0, 16.3, 0.0], [2, 2858, 620.0, 3.31, 133.0, 44.8, 8.2], [3, 1111, 1258.0, 3.68, 444.0, 35.8, 56.2], [4, 388, 2583.0, 3.73, 404.0, 11.1, 64.7]]}, {"name": "price_rating_gap", "section": "Price and quality", "title": "Rating above or below average, by price tier (1 = cheapest)", "insight": "Ratings rise with price: tier 3 and 4 restaurants rate about 0.35 above average, tier 1 sits 0.16 below.", "chart": {"type": "bar", "x": "price_tier", "y": ["rating_gap"]}, "sql": "WITH national AS (SELECT AVG(rating) AS avg_rating FROM restaurants)\nSELECT 'Tier ' || price_range                         AS price_tier,\n       ROUND(AVG(rating), 2)                          AS avg_rating,\n       ROUND(AVG(rating) - national.avg_rating, 2)    AS rating_gap\nFROM restaurants CROSS JOIN national\nGROUP BY price_range\nORDER BY price_range;", "columns": ["price_tier", "avg_rating", "rating_gap"], "rows": [["Tier 1", 3.2, -0.16], ["Tier 2", 3.31, -0.04], ["Tier 3", 3.68, 0.33], ["Tier 4", 3.73, 0.38]]}, {"name": "delivery_by_tier", "section": "Price and quality", "title": "Online delivery and table booking adoption by price tier", "insight": "Online delivery peaks in the mid-price tier 2 (45%), while table booking is a premium feature: 56% of tier 3 and 65% of tier 4 restaurants offer it, and no tier 1 restaurant does.", "chart": {"type": "bar", "x": "price_tier", "y": ["online_delivery_pct", "table_booking_pct"]}, "sql": "SELECT 'Tier ' || price_range                                         AS price_tier,\n       ROUND(100.0 * SUM(has_online_delivery = 'Yes') / COUNT(*), 1)  AS online_delivery_pct,\n       ROUND(100.0 * SUM(has_table_booking = 'Yes') / COUNT(*), 1)    AS table_booking_pct\nFROM restaurants\nGROUP BY price_range\nORDER BY price_range;", "columns": ["price_tier", "online_delivery_pct", "table_booking_pct"], "rows": [["Tier 1", 16.3, 0.0], ["Tier 2", 44.8, 8.2], ["Tier 3", 35.8, 56.2], ["Tier 4", 11.1, 64.7]]}, {"name": "delivery_effect", "section": "Price and quality", "title": "Does online delivery go with better ratings? (compared within each price tier)", "insight": "Within the same price tier, offering online delivery makes almost no difference to ratings (within 0.1 points in tiers 1 to 3).", "chart": {"type": "bar", "x": "price_tier", "y": ["with_delivery", "without_delivery"]}, "sql": "SELECT 'Tier ' || price_range                                            AS price_tier,\n       ROUND(AVG(CASE WHEN has_online_delivery = 'Yes' THEN rating END), 2) AS with_delivery,\n       ROUND(AVG(CASE WHEN has_online_delivery = 'No'  THEN rating END), 2) AS without_delivery\nFROM restaurants\nGROUP BY price_range\nORDER BY price_range;", "columns": ["price_tier", "with_delivery", "without_delivery"], "rows": [["Tier 1", 3.26, 3.17], ["Tier 2", 3.33, 3.3], ["Tier 3", 3.63, 3.71], ["Tier 4", 3.89, 3.71]]}, {"name": "votes_vs_rating", "section": "Price and quality", "title": "Average rating by number of votes", "insight": "Ratings climb steadily with engagement: restaurants with 1,000+ votes average 4.11, against 3.10 for those under 50.", "chart": {"type": "bar", "x": "vote_band", "y": ["avg_rating"]}, "sql": "SELECT CASE\n           WHEN votes < 50   THEN 'Under 50'\n           WHEN votes < 200  THEN '50-199'\n           WHEN votes < 500  THEN '200-499'\n           WHEN votes < 1000 THEN '500-999'\n           ELSE '1,000+'\n       END                    AS vote_band,\n       COUNT(*)               AS restaurants,\n       ROUND(AVG(rating), 2)  AS avg_rating\nFROM restaurants\nWHERE rating IS NOT NULL\nGROUP BY vote_band\nORDER BY MIN(votes);", "columns": ["vote_band", "restaurants", "avg_rating"], "rows": [["Under 50", 3263, 3.1], ["50-199", 1998, 3.44], ["200-499", 751, 3.78], ["500-999", 266, 3.94], ["1,000+", 235, 4.11]]}, {"name": "best_value", "section": "Best value", "title": "Best value restaurants in Delhi NCR: weighted rating, cost for two ₹500 or less", "insight": "Ranked on a weighted rating that discounts low vote counts, Delhi NCR's best value spots at ₹500 or less for two are dessert and South Indian institutions, led by Naturals Ice Cream, Saravana Bhavan and Wenger's in Connaught Place.", "chart": {"type": "table", "money": ["cost_for_two"]}, "sql": "-- Weighted rating pulls restaurants with few votes toward the average:\n--   WR = v/(v+m) * R + m/(v+m) * C,  m = 200 votes, C = average rating\nWITH params AS (\n    SELECT AVG(rating) AS c, 200.0 AS m FROM restaurants WHERE rating IS NOT NULL\n),\nscored AS (\n    SELECT r.restaurant_name, r.locality, r.cuisines, r.cost_for_two, r.rating, r.votes,\n           (r.votes / (r.votes + p.m)) * r.rating + (p.m / (r.votes + p.m)) * p.c AS weighted_rating\n    FROM restaurants r CROSS JOIN params p\n    WHERE r.rating IS NOT NULL AND r.region = 'Delhi NCR' AND r.cost_for_two <= 500\n)\nSELECT RANK() OVER (ORDER BY weighted_rating DESC) AS rank,\n       restaurant_name, locality, cuisines, cost_for_two, rating, votes,\n       ROUND(weighted_rating, 2) AS weighted_rating\nFROM scored\nORDER BY weighted_rating DESC\nLIMIT 15;", "columns": ["rank", "restaurant_name", "locality", "cuisines", "cost_for_two", "rating", "votes", "weighted_rating"], "rows": [[1, "Naturals Ice Cream", "Connaught Place", "Ice Cream", 150, 4.9, 2620, 4.79], [2, "Naturals Ice Cream", "Rajouri Garden", "Ice Cream", 150, 4.7, 474, 4.3], [3, "Saravana Bhavan", "Connaught Place", "South Indian", 500, 4.3, 5172, 4.26], [4, "Wenger's", "Connaught Place", "Bakery, Fast Food, Desserts", 400, 4.3, 3591, 4.25], [5, "Natural Ice Cream", "JMD Kohinoor Mall, Greater Kailash", "Ice Cream", 150, 4.5, 665, 4.23], [6, "Kuremal Mohan Lal Kulfi Wale", "Chawri Bazar", "Ice Cream", 200, 4.5, 545, 4.19], [7, "Wenger's Deli", "Connaught Place", "Bakery, Desserts, Fast Food", 400, 4.3, 1457, 4.19], [8, "Twigly", "DLF Phase 1", "Continental, Italian, Pizza, Asian", 500, 4.6, 395, 4.18], [9, "Sita Ram Diwan Chand", "Paharganj", "Street Food", 100, 4.3, 1317, 4.18], [10, "Caterspoint", "DLF Phase 3", "Mexican, American, Healthy Food", 500, 4.9, 223, 4.17], [11, "Andhra Bhavan", "Feroze Shah Road", "South Indian, Andhra", 200, 4.2, 3010, 4.15], [12, "Bistro 37", "Sector 37", "Fast Food, Chinese", 400, 4.3, 1005, 4.14], [13, "Saravana Bhavan", "Janpath", "South Indian", 500, 4.2, 1869, 4.12], [14, "Naivedyam", "Hauz Khas Village", "South Indian", 500, 4.2, 1627, 4.11], [15, "Oh So Stoned!", "DLF Mall of India, Sector 18, Noida", "Desserts", 250, 4.5, 324, 4.06]]}, {"name": "chains", "section": "Best value", "title": "Largest chains in India by outlets listed", "insight": "The biggest chains rate below average: Cafe Coffee Day and Subway score 3.0 and Domino's 2.93. Barbeque Nation is the exception at 4.35.", "chart": {"type": "hbar", "x": "brand", "y": ["outlets"]}, "sql": "SELECT MAX(restaurant_name)      AS brand,\n       COUNT(*)                  AS outlets,\n       ROUND(AVG(rating), 2)     AS avg_rating,\n       ROUND(AVG(cost_for_two), 0) AS avg_cost_for_two\nFROM restaurants\nGROUP BY LOWER(restaurant_name)\nORDER BY outlets DESC\nLIMIT 12;", "columns": ["brand", "outlets", "avg_rating", "avg_cost_for_two"], "rows": [["Cafe Coffee Day", 83, 3.0, 450.0], ["Domino's Pizza", 79, 2.93, 700.0], ["Subway", 63, 3.0, 498.0], ["Green Chick Chop", 51, 3.1, 350.0], ["McDonald's", 48, 3.41, 491.0], ["Keventers", 34, 3.37, 387.0], ["Pizza Hut", 29, 3.47, 898.0], ["Giani", 29, 3.25, 379.0], ["Baskin Robbins", 28, 3.26, 300.0], ["Barbeque Nation", 25, 4.35, 1552.0], ["Giani's", 22, 3.4, 393.0], ["Dunkin' Donuts", 22, 3.63, 600.0]]}, {"name": "data_quality", "section": "Data quality", "title": "What the cleaning step found and fixed", "insight": "The biggest fix is the 2,139 unrated restaurants stored as a 1.0 rating. Left in, they would drag the India average from 3.35 down to about 2.77 and make cheap, new restaurants look like the worst in the country.", "chart": {"type": "table"}, "sql": "SELECT check_name, rows_affected, action\nFROM data_quality_log;", "columns": ["check_name", "rows_affected", "action"], "rows": [["Raw rows loaded (15 countries)", 9551, "none"], ["Restaurants outside India (country code <> 1)", 899, "excluded: different currencies and tiny samples"], ["Duplicate restaurant id", 0, "none needed"], ["Rating 1.0 with fewer than 4 votes (placeholder for \"not rated\")", 2139, "rating set to NULL"], ["Cost for two recorded as 0", 9, "cost set to NULL"], ["Clean Indian restaurants", 8652, "final table"]]}]};
+const charts = [];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pretty = c => c.replace(/_/g, " ").replace(/\bpct\b/i, "%").replace(/\bavg\b/i, "avg").replace(/^./, s => s.toUpperCase());
+const CUR = DATA.currency || "";
+
+function fmt(v, col, chart) {
+  if (v === null || v === undefined) return "–";
+  if (typeof v !== "number") return String(v);
+  const money = chart && chart.money && chart.money.includes(col);
+  const pct = /_pct$/i.test(col) || (chart && chart.pct && chart.pct.includes(col));
+  let s;
+  const a = Math.abs(v);
+  if (a >= 1e7 && money && CUR === "₹") s = (v / 1e7).toFixed(2) + " Cr";
+  else if (a >= 1e6) s = (v / 1e6).toFixed(a >= 1e8 ? 0 : 2) + "M";
+  else if (a >= 1e5) s = (v / 1e3).toFixed(0) + "K";
+  else if (a >= 1e4) s = (v / 1e3).toFixed(1) + "K";
+  else if (Number.isInteger(v)) s = v.toLocaleString("en-US");
+  else s = v.toLocaleString("en-US", { maximumFractionDigits: a < 10 ? 2 : 1 });
+  if (money) s = CUR + s;
+  if (pct) s = s + "%";
+  return s;
+}
+function fmtFull(v, col, chart) {
+  if (typeof v !== "number") return v === null ? "–" : String(v);
+  if (/(_id|_year|^year)$/i.test(col)) return String(v);
+  const money = chart && chart.money && chart.money.includes(col);
+  const pct = /_pct$/i.test(col) || (chart && chart.pct && chart.pct.includes(col));
+  const s = v.toLocaleString("en-US", { maximumFractionDigits: Number.isInteger(v) ? 0 : 2 });
+  return (money ? CUR : "") + s + (pct ? "%" : "");
+}
+
+function highlightSQL(sql) {
+  const kw = /\b(WITH|RECURSIVE|SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|JOIN|LEFT JOIN|INNER JOIN|ON|AS|AND|OR|NOT|IN|IS|NULL|CASE|WHEN|THEN|ELSE|END|DISTINCT|OVER|PARTITION BY|UNION ALL|UNION|DESC|ASC|BETWEEN|LIKE|CAST|ROUND|COUNT|SUM|AVG|MIN|MAX|NTILE|RANK|DENSE_RANK|ROW_NUMBER|LAG|LEAD|COALESCE|NULLIF|SUBSTR|INSTR|TRIM|REPLACE|LOWER|UPPER|LENGTH|REAL|INTEGER|TEXT|JULIANDAY|STRFTIME|DATE|PRINTF|IIF|EXISTS|FILTER)\b/g;
+  return sql.split("\n").map(line => {
+    const i = line.indexOf("--");
+    let code = i >= 0 ? line.slice(0, i) : line, cm = i >= 0 ? line.slice(i) : "";
+    code = esc(code).replace(/('[^']*')/g, '<span class="str">$1</span>');
+    code = code.replace(/(<span class="str">.*?<\/span>)|([^<]+)/g, (m, s, t) => s ? s : t.replace(kw, '<span class="kw">$1</span>'));
+    return code + (cm ? `<span class="cm">${esc(cm)}</span>` : "");
+  }).join("\n");
+}
+
+function tableHTML(p) {
+  const numCols = p.columns.map((c, i) => p.rows.some(r => typeof r[i] === "number"));
+  const head = p.columns.map((c, i) => `<th class="${numCols[i] ? "num" : ""}">${esc(pretty(c))}</th>`).join("");
+  const body = p.rows.slice(0, 200).map(r => "<tr>" + r.map((v, i) => `<td class="${numCols[i] ? "num" : ""}">${esc(fmtFull(v, p.columns[i], p.chart))}</td>`).join("") + "</tr>").join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderKPI(p) {
+  const row = p.rows[0] || [];
+  return (p.insight ? `<p class="insight">${esc(p.insight)}</p>` : "") + `<div class="kpis">${p.columns.map((c, i) => `<div class="kpi"><span class="label">${esc(pretty(c))}</span><span class="value">${esc(fmt(row[i], c, p.chart))}</span></div>`).join("")}</div>`;
+}
+
+function panelHTML(p, idx) {
+  const full = p.chart.w === "full" || p.chart.type === "table" ? " full" : "";
+  const hasChart = !["table"].includes(p.chart.type);
+  const ys = p.chart.y || [];
+  const legend = ys.length > 1 ? `<div class="legend">${ys.map((y, i) => `<span><i style="background:var(--s${i + 1})"></i>${esc(pretty(y))}</span>`).join("")}</div>` : "";
+  return `<article class="panel${full}" id="${esc(p.name)}">
+    <div class="panel-head"><h3>${esc(p.title)}</h3>
+      <div class="tabs" role="tablist">
+        ${hasChart ? `<button role="tab" aria-selected="true" data-v="chart">Chart</button>` : ""}
+        <button role="tab" aria-selected="${hasChart ? "false" : "true"}" data-v="table">Table</button>
+        <button role="tab" aria-selected="false" data-v="sql">SQL</button>
+      </div></div>
+    ${p.insight ? `<p class="insight">${esc(p.insight)}</p>` : ""}
+    ${hasChart ? `<div class="view" data-view="chart">${legend}<div class="chart-box" style="height:${chartHeight(p)}px"><canvas id="c${idx}" role="img" aria-label="${esc(p.title)}"></canvas></div></div>` : ""}
+    <div class="view table-box" data-view="table" ${hasChart ? "hidden" : ""}>${tableHTML(p)}</div>
+    <div class="view sql-box" data-view="sql" hidden><pre><code>${highlightSQL(p.sql)}</code></pre></div>
+  </article>`;
+}
+function chartHeight(p) {
+  if (p.chart.type === "hbar") return Math.max(180, p.rows.length * (p.chart.y.length > 1 ? 34 : 28) + 40);
+  return 280;
+}
+
+function build() {
+  const app = document.getElementById("app");
+  const d = DATA.dataset || {};
+  let html = `<header>
+    <span class="eyebrow">SQL portfolio project · ${esc(DATA.author || "")}</span>
+    <h1>${esc(DATA.title)}</h1>
+    <p class="sub">${esc(DATA.subtitle || "")}</p>
+    <div class="meta">
+      ${d.name ? `<span>Data: <a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.name)}</a>${d.rows ? " · " + esc(d.rows) : ""}</span>` : ""}
+      ${DATA.repo ? `<span>Code: <a href="${esc(DATA.repo)}" target="_blank" rel="noopener">GitHub repository</a></span>` : ""}
+    </div>
+    ${DATA.stack ? `<div class="chips">${DATA.stack.map(s => `<span class="chip">${esc(s)}</span>`).join("")}</div>` : ""}
+  </header>`;
+  const sections = [];
+  DATA.panels.forEach((p, i) => {
+    const name = p.section || "Analysis";
+    let s = sections.find(x => x.name === name);
+    if (!s) sections.push(s = { name, items: [] });
+    s.items.push([p, i]);
+  });
+  for (const s of sections) {
+    const kpis = s.items.filter(([p]) => p.chart.type === "kpi");
+    const rest = s.items.filter(([p]) => p.chart.type !== "kpi");
+    html += `<section><h2>${esc(s.name)}</h2>`;
+    html += kpis.map(([p]) => renderKPI(p)).join("");
+    // a section with an odd number of half-width panels lets the last one span the row
+    const half = rest.filter(([p]) => !(p.chart.w === "full" || p.chart.type === "table"));
+    if (half.length % 2 === 1) half[half.length - 1][0].chart.w = "full";
+    if (rest.length) html += `<div class="grid">${rest.map(([p, i]) => panelHTML(p, i)).join("")}</div>`;
+    html += `</section>`;
+  }
+  html += `<footer>Every number on this page comes from the SQL shown in each panel, run against SQLite. Built by ${esc(DATA.author || "")}.</footer>`;
+  app.innerHTML = html;
+  app.addEventListener("click", e => {
+    const b = e.target.closest(".tabs button"); if (!b) return;
+    const panel = b.closest(".panel");
+    panel.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b ? "true" : "false"));
+    panel.querySelectorAll(".view").forEach(v => v.hidden = v.dataset.view !== b.dataset.v);
+  });
+  drawCharts();
+}
+
+function drawCharts() {
+  if (!window.Chart) return;
+  charts.splice(0).forEach(c => c.destroy());
+  const ink2 = css("--ink-2"), muted = css("--muted"), grid = css("--grid"), axis = css("--axis"), surface = css("--surface");
+  const series = [css("--s1"), css("--s2"), css("--s3"), css("--s4")];
+  Chart.defaults.font.family = css("--font-ui");
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = muted;
+  DATA.panels.forEach((p, idx) => {
+    const el = document.getElementById("c" + idx); if (!el) return;
+    const t = p.chart.type, xi = p.columns.indexOf(p.chart.x);
+    const labels = p.rows.map(r => r[xi]);
+    const horiz = t === "hbar";
+    const datasets = (p.chart.y || []).map((y, k) => {
+      const yi = p.columns.indexOf(y);
+      const base = { label: pretty(y), data: p.rows.map(r => r[yi]), backgroundColor: series[k], borderColor: series[k] };
+      if (t === "line") return { ...base, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, pointBorderColor: surface, pointBorderWidth: 2, tension: 0, fill: (p.chart.y.length === 1) ? { target: "origin", above: series[k] + "1a" } : false };
+      return { ...base, borderWidth: 0, borderRadius: 4, borderSkipped: "start", maxBarThickness: 22, categoryPercentage: 0.8, barPercentage: 0.9 };
+    });
+    const valueAxis = { grid: { color: grid, drawTicks: false }, border: { display: false }, ticks: { color: muted, padding: 6, maxRotation: 0, autoSkipPadding: 14, callback: v => fmt(v, p.chart.y[0], p.chart) }, beginAtZero: t !== "line" || p.chart.zero === "yes" };
+    const catAxis = { grid: { display: false }, border: { color: axis }, ticks: { color: ink2, autoSkip: !horiz, autoSkipPadding: 10, maxRotation: 0, callback: function (v) { const l = String(this.getLabelForValue(v)); return l.length > 26 ? l.slice(0, 25) + "…" : l; } } };
+    charts.push(new Chart(el, {
+      type: t === "line" ? "line" : "bar",
+      data: { labels, datasets },
+      options: {
+        indexAxis: horiz ? "y" : "x", responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { display: false },
+          tooltip: { backgroundColor: css("--ink"), titleColor: surface, bodyColor: surface, padding: 10, cornerRadius: 6, displayColors: p.chart.y.length > 1,
+            callbacks: { label: c => ` ${c.dataset.label}: ${fmtFull(c.parsed[horiz ? "x" : "y"], p.chart.y[c.datasetIndex], p.chart)}` } } },
+        scales: horiz ? { x: valueAxis, y: catAxis } : { x: catAxis, y: valueAxis }
+      }
+    }));
+  });
+}
+
+build();
+const mq = window.matchMedia("(prefers-color-scheme: dark)");
+mq.addEventListener && mq.addEventListener("change", drawCharts);
+new MutationObserver(drawCharts).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
+</body>
+</html>

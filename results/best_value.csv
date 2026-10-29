@@ -1,0 +1,16 @@
+rank,restaurant_name,locality,cuisines,cost_for_two,rating,votes,weighted_rating
+1,Naturals Ice Cream,Connaught Place,Ice Cream,150,4.9,2620,4.79
+2,Naturals Ice Cream,Rajouri Garden,Ice Cream,150,4.7,474,4.3
+3,Saravana Bhavan,Connaught Place,South Indian,500,4.3,5172,4.26
+4,Wenger's,Connaught Place,"Bakery, Fast Food, Desserts",400,4.3,3591,4.25
+5,Natural Ice Cream,"JMD Kohinoor Mall, Greater Kailash",Ice Cream,150,4.5,665,4.23
+6,Kuremal Mohan Lal Kulfi Wale,Chawri Bazar,Ice Cream,200,4.5,545,4.19
+7,Wenger's Deli,Connaught Place,"Bakery, Desserts, Fast Food",400,4.3,1457,4.19
+8,Twigly,DLF Phase 1,"Continental, Italian, Pizza, Asian",500,4.6,395,4.18
+9,Sita Ram Diwan Chand,Paharganj,Street Food,100,4.3,1317,4.18
+10,Caterspoint,DLF Phase 3,"Mexican, American, Healthy Food",500,4.9,223,4.17
+11,Andhra Bhavan,Feroze Shah Road,"South Indian, Andhra",200,4.2,3010,4.15
+12,Bistro 37,Sector 37,"Fast Food, Chinese",400,4.3,1005,4.14
+13,Saravana Bhavan,Janpath,South Indian,500,4.2,1869,4.12
+14,Naivedyam,Hauz Khas Village,South Indian,500,4.2,1627,4.11
+15,Oh So Stoned!,"DLF Mall of India, Sector 18, Noida",Desserts,250,4.5,324,4.06

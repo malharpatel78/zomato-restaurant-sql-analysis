@@ -1,0 +1,11 @@
+{
+  "title": "Zomato Restaurant Deep Dive",
+  "subtitle": "Price, quality and online delivery across 8,652 Indian restaurants on Zomato, most of them in Delhi NCR: which neighbourhoods, cuisines and price points earn the best ratings, and where value for money sits.",
+  "author": "Malhar Patel",
+  "repo": "https://github.com/malharpatel78/zomato-restaurant-sql-analysis",
+  "currency": "₹",
+  "stack": ["SQLite", "Recursive CTE", "Window functions", "Weighted rating", "CASE bucketing", "Chart.js"],
+  "database": "zomato.db",
+  "dataset": {"name": "Zomato Restaurants Data (Kaggle, Shruti Mehta)", "url": "https://www.kaggle.com/datasets/shrutimehta/zomato-restaurants-data", "rows": "9,551 restaurants, 8,652 in India"},
+  "raw_tables": [{"table": "zomato_raw", "file": "zomato.csv"}]
+}

@@ -1,0 +1,7 @@
+check_name,rows_affected,action
+Raw rows loaded (15 countries),9551,none
+Restaurants outside India (country code <> 1),899,excluded: different currencies and tiny samples
+Duplicate restaurant id,0,none needed
+"Rating 1.0 with fewer than 4 votes (placeholder for ""not rated"")",2139,rating set to NULL
+Cost for two recorded as 0,9,cost set to NULL
+Clean Indian restaurants,8652,final table
